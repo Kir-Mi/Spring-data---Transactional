@@ -6,6 +6,10 @@ import com.example.SpringdataTransactional.exception.NotFoundException;
 import com.example.SpringdataTransactional.model.*;
 import com.example.SpringdataTransactional.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -16,20 +20,27 @@ import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
-public class OrderService {
+public class OrderService implements ApplicationContextAware {
     private final CustomerRepository customerRepository;
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
+    private ApplicationContext context;
+
+    @Override
+    public void setApplicationContext(ApplicationContext context) throws BeansException {
+        this.context = context;
+    }
 
     @Transactional
     public Order placeOrder(OrderDto orderDto) {
+        OrderService self = context.getBean(OrderService.class);
         Customer customer = customerRepository.findById(orderDto.getCustomerId())
                 .orElseThrow(() -> new NotFoundException("Customer not found", HttpStatus.NOT_FOUND));
-        List<Product> products = getProducts(orderDto.getProducts());
+        List<Product> products = self.getProducts(orderDto.getProducts());
         double totalAmount = products.stream()
                 .mapToDouble(Product::getPrice)
                 .sum();
-        changeCustomerBalance(customer, totalAmount);
+        self.changeCustomerBalance(customer, totalAmount);
         Order order = Order.builder()
                 .customer(customer)
                 .totalAmount(totalAmount)
@@ -38,7 +49,7 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
-    @Transactional(propagation = Propagation.NESTED)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<Product> getProducts(List<Long> idList) {
         return idList.stream()
                 .map(id -> {
@@ -50,7 +61,7 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(propagation = Propagation.NESTED)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void changeCustomerBalance(Customer customer, Double totalAmount) {
         if (totalAmount > customer.getBalance()) {
             throw new BasicException("Balance is too small", HttpStatus.CONFLICT);
