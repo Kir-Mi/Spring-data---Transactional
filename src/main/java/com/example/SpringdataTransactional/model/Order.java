@@ -20,6 +20,6 @@ public class Order {
     private Customer customer;
     @Column(name = "total_amount")
     private double totalAmount;
-    @OneToMany
+    @Transient
     private List<Product> products;
 }
